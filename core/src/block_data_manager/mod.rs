@@ -33,6 +33,9 @@ pub mod block_data_types;
 pub mod db_gc_manager;
 pub mod db_manager;
 pub mod tx_data_manager;
+
+mod relational_db;
+
 use crate::{
     block_data_manager::{
         db_manager::DBManager, tx_data_manager::TransactionDataManager,

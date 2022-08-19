@@ -76,6 +76,9 @@ slab = "0.4"
 solidity-abi = {path="../util/solidity-abi"}
 solidity-abi-derive = {path="../util/solidity-abi-derive"}
 sha3-macro = {path="../util/sha3-macro"}
+chrono = "0.4.19"
+diesel = { version = "1.4.5", features = ["mysql", "chrono", "r2d2"] }
+dotenv = "0.15.0"
 sqlite = "0.25"
 sqlite3-sys = "0.12"
 static_assertions = "1.1.0"

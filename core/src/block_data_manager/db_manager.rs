@@ -28,6 +28,7 @@ use rlp::Rlp;
 use std::{collections::HashMap, fs, path::Path, sync::Arc};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+use crate::block_data_manager::relational_db::insert_block;
 
 const LOCAL_BLOCK_INFO_SUFFIX_BYTE: u8 = 1;
 const BLOCK_BODY_SUFFIX_BYTE: u8 = 2;
@@ -275,6 +276,7 @@ impl DBManager {
     }
 
     pub fn insert_block_body_to_db(&self, block: &Block) {
+        insert_block(block);
         self.insert_to_db(
             DBTable::Blocks,
             &block_body_key(&block.hash()),

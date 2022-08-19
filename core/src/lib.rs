@@ -25,6 +25,10 @@ extern crate substrate_bn as bn;
 #[macro_use]
 pub mod message;
 
+#[macro_use]
+extern crate diesel;
+extern crate dotenv;
+
 pub mod block_data_manager;
 mod builtin;
 pub mod cache_config;
