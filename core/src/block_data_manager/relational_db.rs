@@ -3,7 +3,7 @@ use dotenv::dotenv;
 use chrono::NaiveDateTime;
 use diesel::mysql::MysqlConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::prelude::{RunQueryDsl};
+use diesel::prelude::*;
 use std::env;
 // use primitives::block::BlockHeight;
 // use cfx_types::H256;
@@ -29,7 +29,13 @@ table! {
         timestamp -> Timestamp,
     }
 }
-
+#[derive(Queryable)]
+pub struct BlockPO {
+    pub id: i64,
+    pub hash: String,
+    pub height: i64,
+    pub timestamp: NaiveDateTime,
+}
 #[derive(Insertable)]
 #[table_name="blocks"]
 pub struct NewBlock<'a> {
@@ -37,19 +43,35 @@ pub struct NewBlock<'a> {
     pub height: &'a i64,
     pub timestamp: &'a NaiveDateTime,
 }
-
+pub fn query_block(block_hash: &str) -> Option<BlockPO> {
+    use self::blocks::dsl::*;
+    let conn = _POOL.get().unwrap();
+    blocks.filter(hash.eq(block_hash))
+        .get_result(&conn).optional().unwrap()
+        //.load::<BlockPO>(&conn)?//.expect("Error querying one block");
+    // if list.length
+}
 pub fn insert_block(block: &Block) {
+    let conn = _POOL.get().unwrap();
+
+    let height = block.block_header.height();
+    let hash = format!( "{:#x}", block.block_header.hash());
+
+    if height == 0 {
+        let block_0 = query_block(&hash);
+        if block_0.is_some() {
+            return;
+        }
+    }
     let mut timestamp = block.block_header.timestamp();
     if timestamp == 0 {
         timestamp = 1;
     }
-    let hash = format!( "{:#x}", block.block_header.hash());
     let new_block = NewBlock{
         hash: &( hash ),
-        height: &(block.block_header.height() as i64),
+        height: &(height as i64),
         timestamp: &NaiveDateTime::from_timestamp(timestamp as i64, 0),
     };
-    let conn = _POOL.get().unwrap();
     diesel::insert_into(blocks::table)
         .values(&new_block)
         .execute(&conn)
