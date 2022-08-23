@@ -5,9 +5,8 @@ use diesel::mysql::MysqlConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::prelude::*;
 use std::env;
-// use primitives::block::BlockHeight;
-// use cfx_types::H256;
-use primitives::Block;
+use primitives::{Block};
+use cfx_types::Address;
 
 type DbCon = MysqlConnection;
 lazy_static! {
@@ -43,13 +42,112 @@ pub struct NewBlock<'a> {
     pub height: &'a i64,
     pub timestamp: &'a NaiveDateTime,
 }
+table! {
+    txs (id) {
+        id -> BigInt,
+        hash -> Text,
+        height -> BigInt,
+        timestamp -> Timestamp,
+        block_id -> BigInt,
+        from_id -> BigInt,
+        to_id -> BigInt,
+        value -> Text,
+        status -> Integer,
+    }
+}
+#[derive(Insertable)]
+#[table_name="txs"]
+pub struct NewTx<'a, 'b> {
+    pub hash: String,
+    pub height: &'b i64,
+    pub timestamp: &'a NaiveDateTime,
+
+    pub block_id: &'a i64,
+    pub from_id: i64,
+    pub to_id: &'a i64,
+    pub value: String,
+    pub status: i32,
+}
+table! {
+    addresses (id) {
+        id -> BigInt,
+        hex -> Text,
+        timestamp -> Timestamp,
+    }
+}
+#[derive(Queryable)]
+pub struct AddressPO {
+    pub id: i64,
+    pub hex: String,
+    pub timestamp: NaiveDateTime,
+}
+#[derive(Insertable)]
+#[table_name="addresses"]
+pub struct NewAddress<'a> {
+    pub hex: &'a str,
+    pub timestamp: &'a NaiveDateTime,
+}
+//
+pub fn find_address(addr: &str) -> Option<AddressPO>{
+    use self::addresses::dsl::*;
+    let conn = _POOL.get().unwrap();
+    addresses.filter(hex.eq(addr))
+        .get_result(&conn).optional().unwrap()
+}
+pub fn save_address(addr: &Address, timestamp: &NaiveDateTime) -> AddressPO {
+    let addr_str = &format!( "{:#x}", addr);
+    let bean = find_address(&addr_str);
+    if bean.is_some() {
+        bean.unwrap()
+    } else {
+        let new_addr = NewAddress{
+            hex: addr_str, timestamp
+        };
+        let conn = _POOL.get().unwrap();
+        diesel::insert_into(addresses::table).values(&new_addr)
+            .execute(&conn).unwrap();
+        find_address(addr_str).unwrap()
+    }
+}
+// txs
+pub fn save_tx_in_block(block: &Block) {
+    // txVec: &Vec<Arc<SignedTransaction>>
+    if block.transactions.is_empty(){
+        return
+    }
+    let height = block.block_header.height();
+    let hash = format!( "{:#x}", block.block_header.hash());
+    let block_po = query_block(&hash).unwrap();
+    let mut tx_arr =  Vec::new();
+    let block_time = &build_block_timestamp(block.block_header.timestamp());
+    let i64height = &(height as i64);
+    for (_, tx) in block.transactions.iter().enumerate() {
+        let from_id = save_address(&tx.sender, block_time).id;
+        let new_tx = NewTx{
+            hash: (format!( "{:#x}", tx.hash) ),
+            height: i64height,
+            timestamp: block_time,
+
+            block_id: &block_po.id,
+            from_id,//: from_id,
+            to_id: &0,//&save_address(&tx.sender, blockTime).id,
+            value: tx.value().to_string(),
+            status: 0
+        };
+        tx_arr.push(new_tx);
+    }
+    let conn = _POOL.get().unwrap();
+    diesel::insert_into(txs::table)
+        .values(&tx_arr)
+        .execute(&conn)
+        .expect("Error saving new tx_arr");
+}
+// blocks
 pub fn query_block(block_hash: &str) -> Option<BlockPO> {
     use self::blocks::dsl::*;
     let conn = _POOL.get().unwrap();
     blocks.filter(hash.eq(block_hash))
         .get_result(&conn).optional().unwrap()
-        //.load::<BlockPO>(&conn)?//.expect("Error querying one block");
-    // if list.length
 }
 pub fn insert_block(block: &Block) {
     let conn = _POOL.get().unwrap();
@@ -63,17 +161,21 @@ pub fn insert_block(block: &Block) {
             return;
         }
     }
-    let mut timestamp = block.block_header.timestamp();
-    if timestamp == 0 {
-        timestamp = 1;
-    }
     let new_block = NewBlock{
         hash: &( hash ),
         height: &(height as i64),
-        timestamp: &NaiveDateTime::from_timestamp(timestamp as i64, 0),
+        timestamp: &build_block_timestamp(block.block_header.timestamp()),
     };
     diesel::insert_into(blocks::table)
         .values(&new_block)
         .execute(&conn)
         .expect("Error saving new block");
+    save_tx_in_block(block);
+}
+
+pub fn build_block_timestamp(mut timestamp: u64) -> NaiveDateTime {
+    if timestamp == 0 {
+        timestamp = 1;
+    }
+    NaiveDateTime::from_timestamp(timestamp as i64, 0)
 }
