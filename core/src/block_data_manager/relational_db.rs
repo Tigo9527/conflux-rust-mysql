@@ -5,7 +5,7 @@ use diesel::mysql::MysqlConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::prelude::*;
 use std::env;
-use primitives::{Block};
+use primitives::{Block, TransactionOutcome};
 use cfx_types::Address;
 
 type DbCon = MysqlConnection;
@@ -42,6 +42,7 @@ pub struct NewBlock<'a> {
     pub height: &'a i64,
     pub timestamp: &'a NaiveDateTime,
 }
+//===
 table! {
     txs (id) {
         id -> BigInt,
@@ -68,6 +69,25 @@ pub struct NewTx<'a, 'b> {
     pub value: String,
     pub status: i32,
 }
+#[derive(Queryable)]
+pub struct TxPO {
+    pub id: i64,
+    pub hash: String,
+    pub height: i64,
+    pub timestamp: NaiveDateTime,
+    pub block_id: i64,
+    pub from_id: i64,
+    pub to_id: i64,
+    pub value: String,
+    pub status: i32,
+}
+pub fn find_tx(hash_: &String) -> Option<TxPO> {
+    use self::txs::dsl::*;
+    let conn = _POOL.get().unwrap();
+    txs.filter(hash.eq(hash_))
+        .get_result(&conn).optional().unwrap()
+}
+//==
 table! {
     addresses (id) {
         id -> BigInt,
@@ -110,7 +130,7 @@ pub fn save_address(addr: &Address, timestamp: &NaiveDateTime) -> AddressPO {
     }
 }
 // txs
-pub fn save_tx_in_block(block: &Block) {
+pub fn insert_block_tx_relation(block: &Block, tx_status: &Vec<TransactionOutcome>) {
     // txVec: &Vec<Arc<SignedTransaction>>
     if block.transactions.is_empty(){
         return
@@ -121,7 +141,11 @@ pub fn save_tx_in_block(block: &Block) {
     let mut tx_arr =  Vec::new();
     let block_time = &build_block_timestamp(block.block_header.timestamp());
     let i64height = &(height as i64);
-    for (_, tx) in block.transactions.iter().enumerate() {
+    for (idx, tx) in block.transactions.iter().enumerate() {
+        let status = tx_status[idx];
+        if status != TransactionOutcome::Failure && status != TransactionOutcome::Success {
+            continue;
+        }
         let from_id = save_address(&tx.sender, block_time).id;
         let new_tx = NewTx{
             hash: (format!( "{:#x}", tx.hash) ),
@@ -132,12 +156,17 @@ pub fn save_tx_in_block(block: &Block) {
             from_id,//: from_id,
             to_id: &0,//&save_address(&tx.sender, blockTime).id,
             value: tx.value().to_string(),
-            status: 0
+            status: status as i32,
         };
+        if height == 0 {
+            if find_tx(&new_tx.hash).is_some() {
+                return
+            }
+        }
         tx_arr.push(new_tx);
     }
     let conn = _POOL.get().unwrap();
-    diesel::insert_into(txs::table)
+    diesel::replace_into(txs::table)
         .values(&tx_arr)
         .execute(&conn)
         .expect("Error saving new tx_arr");
@@ -149,7 +178,7 @@ pub fn query_block(block_hash: &str) -> Option<BlockPO> {
     blocks.filter(hash.eq(block_hash))
         .get_result(&conn).optional().unwrap()
 }
-pub fn insert_block(block: &Block) {
+pub fn insert_block_relation(block: &Block) {
     let conn = _POOL.get().unwrap();
 
     let height = block.block_header.height();
@@ -170,7 +199,9 @@ pub fn insert_block(block: &Block) {
         .values(&new_block)
         .execute(&conn)
         .expect("Error saving new block");
-    save_tx_in_block(block);
+    if height == 0 {
+        insert_block_tx_relation(block, &vec![TransactionOutcome::Success; block.transactions.len()]);
+    }
 }
 
 pub fn build_block_timestamp(mut timestamp: u64) -> NaiveDateTime {

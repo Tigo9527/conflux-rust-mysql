@@ -23,12 +23,12 @@ use cfx_storage::{
 use cfx_types::H256;
 use db::SystemDB;
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
-use primitives::{Block, BlockHeader, SignedTransaction, TransactionIndex};
+use primitives::{Block, BlockHeader, SignedTransaction, TransactionIndex, TransactionOutcome};
 use rlp::Rlp;
 use std::{collections::HashMap, fs, path::Path, sync::Arc};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-use crate::block_data_manager::relational_db::insert_block;
+use crate::block_data_manager::relational_db::{insert_block_tx_relation, insert_block_relation};
 
 const LOCAL_BLOCK_INFO_SUFFIX_BYTE: u8 = 1;
 const BLOCK_BODY_SUFFIX_BYTE: u8 = 2;
@@ -274,9 +274,11 @@ impl DBManager {
             &blamed_header_verified_roots_key(block_height),
         )
     }
-
+    pub fn insert_block_tx(&self, block: &Block, tx_status: &Vec<TransactionOutcome>) {
+        insert_block_tx_relation(block, tx_status);
+    }
     pub fn insert_block_body_to_db(&self, block: &Block) {
-        insert_block(block);
+        insert_block_relation(block);
         self.insert_to_db(
             DBTable::Blocks,
             &block_body_key(&block.hash()),

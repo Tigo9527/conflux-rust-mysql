@@ -1248,6 +1248,7 @@ impl ConsensusExecutionHandler {
             let mut tx_exec_error_messages =
                 Vec::with_capacity(block.transactions.len());
             let mut receipts = Vec::new();
+            let mut tx_status = Vec::new();
             debug!(
                 "process txs in block: hash={:?}, tx count={:?}",
                 block.hash(),
@@ -1415,7 +1416,7 @@ impl ConsensusExecutionHandler {
                         }
                     }
                 }
-
+                tx_status.push(tx_outcome_status);
                 let (phantom_txs, log_bloom) = build_bloom_and_recover_phantom(
                     &transaction_logs,
                     transaction.hash,
@@ -1519,7 +1520,7 @@ impl ConsensusExecutionHandler {
                 block_receipts.clone(),
                 on_local_pivot,
             );
-
+            self.data_man.insert_block_tx(&block, &tx_status);
             epoch_receipts.push(block_receipts);
         }
         if self.pos_verifier.pos_option().is_some() {

@@ -393,7 +393,9 @@ impl BlockDataManager {
         assert!(tx_index.real_index < block.transactions.len());
         Some(block.transactions[tx_index.real_index].clone())
     }
-
+    pub fn insert_block_tx(&self, block: &Block, tx_status: &Vec<TransactionOutcome>) {
+        self.db_manager.insert_block_tx(block, tx_status);
+    }
     /// insert block body in memory cache and db
     pub fn insert_block_body(
         &self, hash: H256, block: Arc<Block>, persistent: bool,
