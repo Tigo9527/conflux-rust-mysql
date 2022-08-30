@@ -28,7 +28,7 @@ use rlp::Rlp;
 use std::{collections::HashMap, fs, path::Path, sync::Arc};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-use crate::block_data_manager::relational_db::{insert_block_tx_relation, insert_block_relation};
+use crate::block_data_manager::relational_db::{insert_block_tx_relation, insert_block_relation, remove_tx_relation};
 
 const LOCAL_BLOCK_INFO_SUFFIX_BYTE: u8 = 1;
 const BLOCK_BODY_SUFFIX_BYTE: u8 = 2;
@@ -353,6 +353,7 @@ impl DBManager {
     }
 
     pub fn remove_transaction_index_from_db(&self, hash: &H256) {
+        remove_tx_relation(hash);
         self.remove_from_db(DBTable::Transactions, hash.as_bytes())
     }
 

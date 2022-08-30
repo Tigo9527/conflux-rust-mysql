@@ -6,7 +6,7 @@ use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::prelude::*;
 use std::env;
 use primitives::{Block, TransactionOutcome};
-use cfx_types::Address;
+use cfx_types::{Address, H256};
 
 type DbCon = MysqlConnection;
 lazy_static! {
@@ -19,7 +19,7 @@ pub fn pool() -> Pool<ConnectionManager<DbCon>> {
     let manager = ConnectionManager::<DbCon>::new(database_url);
     Pool::builder().max_size(15).build(manager).unwrap()
 }
-
+//===
 table! {
     blocks (id) {
         id -> BigInt,
@@ -41,6 +41,41 @@ pub struct NewBlock<'a> {
     pub hash: &'a str,
     pub height: &'a i64,
     pub timestamp: &'a NaiveDateTime,
+}
+//===
+table! {
+    logs (id) {
+        id -> BigInt,
+        tx_id -> BigInt,
+        log_index -> Integer,
+        address_id -> BigInt,
+        topic0_id -> BigInt,
+        topic1_id -> BigInt,
+        topic2_id -> BigInt,
+        topic3_id -> BigInt,
+    }
+}
+#[derive(Queryable)]
+pub struct LogPO {
+    pub id: i64,
+    pub tx_id: i64,
+    pub log_index: i32,
+    pub address_id: i64,
+    pub topic0_id: i64,
+    pub topic1_id: i64,
+    pub topic2_id: i64,
+    pub topic3_id: i64,
+}
+#[derive(Insertable)]
+#[table_name="logs"]
+pub struct NewLog {
+    pub tx_id: i64,
+    pub log_index: i32,
+    pub address_id: i64,
+    pub topic0_id: i64,
+    pub topic1_id: i64,
+    pub topic2_id: i64,
+    pub topic3_id: i64,
 }
 //===
 table! {
@@ -107,11 +142,37 @@ pub struct NewAddress<'a> {
     pub hex: &'a str,
     pub timestamp: &'a NaiveDateTime,
 }
-//
+//==
+table! {
+    bytes32s (id) {
+        id -> BigInt,
+        hex -> Text,
+        timestamp -> Timestamp,
+    }
+}
+#[derive(Queryable)]
+pub struct Bytes32PO {
+    pub id: i64,
+    pub hex: String,
+    pub timestamp: NaiveDateTime,
+}
+#[derive(Insertable)]
+#[table_name="bytes32s"]
+pub struct NewBytes32<'a> {
+    pub hex: &'a str,
+    pub timestamp: &'a NaiveDateTime,
+}
+//==
 pub fn find_address(addr: &str) -> Option<AddressPO>{
     use self::addresses::dsl::*;
     let conn = _POOL.get().unwrap();
     addresses.filter(hex.eq(addr))
+        .get_result(&conn).optional().unwrap()
+}
+pub fn find_byte32(hex_: &str) -> Option<Bytes32PO>{
+    use self::bytes32s::dsl::*;
+    let conn = _POOL.get().unwrap();
+    bytes32s.filter(hex.eq(hex_))
         .get_result(&conn).optional().unwrap()
 }
 pub fn save_address(addr: &Address, timestamp: &NaiveDateTime) -> AddressPO {
@@ -130,6 +191,13 @@ pub fn save_address(addr: &Address, timestamp: &NaiveDateTime) -> AddressPO {
     }
 }
 // txs
+pub fn remove_tx_relation(hash_: &H256) {
+    use self::txs::dsl::*;
+    let conn = _POOL.get().unwrap();
+    let hash_0x = format!( "{:#x}", hash_);
+    diesel::delete(txs.filter(hash.eq(hash_0x)))
+        .execute(&conn).unwrap();
+}
 pub fn insert_block_tx_relation(block: &Block, tx_status: &Vec<TransactionOutcome>) {
     // txVec: &Vec<Arc<SignedTransaction>>
     if block.transactions.is_empty(){
