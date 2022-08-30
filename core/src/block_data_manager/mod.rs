@@ -54,6 +54,7 @@ use db_gc_manager::GCProgress;
 use metrics::{register_meter_with_group, Meter, MeterTimer};
 use primitives::pos::PosBlockId;
 use std::{hash::Hash, path::Path, time::Duration};
+use crate::block_data_manager::relational_db::insert_block_receipts;
 
 lazy_static! {
     static ref TX_POOL_RECOVER_TIMER: Arc<dyn Meter> =
@@ -392,6 +393,9 @@ impl BlockDataManager {
         )?;
         assert!(tx_index.real_index < block.transactions.len());
         Some(block.transactions[tx_index.real_index].clone())
+    }
+    pub fn insert_block_receipts(&self, block: &Block, block_receipts: Arc<BlockReceipts>) {
+        insert_block_receipts(&block, block_receipts);
     }
     pub fn insert_block_tx(&self, block: &Block, tx_status: &Vec<TransactionOutcome>) {
         self.db_manager.insert_block_tx(block, tx_status);

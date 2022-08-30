@@ -5,8 +5,9 @@ use diesel::mysql::MysqlConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::prelude::*;
 use std::env;
-use primitives::{Block, TransactionOutcome};
+use primitives::{Block, TransactionOutcome, BlockReceipts};
 use cfx_types::{Address, H256};
+use std::sync::Arc;
 
 type DbCon = MysqlConnection;
 lazy_static! {
@@ -175,6 +176,21 @@ pub fn find_byte32(hex_: &str) -> Option<Bytes32PO>{
     bytes32s.filter(hex.eq(hex_))
         .get_result(&conn).optional().unwrap()
 }
+pub fn save_bytes32(bytes32: &H256, timestamp: &NaiveDateTime) -> Bytes32PO {
+    let hex_str = &format!("{:#x}", bytes32);
+    let bean = find_byte32(&hex_str);
+    if bean.is_some() {
+        bean.unwrap()
+    } else {
+        let new_addr = NewBytes32{
+            hex: hex_str, timestamp
+        };
+        let conn = _POOL.get().unwrap();
+        diesel::insert_into(bytes32s::table).values(&new_addr)
+            .execute(&conn).unwrap();
+        find_byte32(hex_str).unwrap()
+    }
+}
 pub fn save_address(addr: &Address, timestamp: &NaiveDateTime) -> AddressPO {
     let addr_str = &format!( "{:#x}", addr);
     let bean = find_address(&addr_str);
@@ -189,6 +205,47 @@ pub fn save_address(addr: &Address, timestamp: &NaiveDateTime) -> AddressPO {
             .execute(&conn).unwrap();
         find_address(addr_str).unwrap()
     }
+}
+// logs
+pub fn insert_block_receipts(block: &Block, block_receipts: Arc<BlockReceipts>) {
+    let receipts = &block_receipts.receipts;
+    if receipts.is_empty() {
+        return
+    }
+    let block_time = &build_block_timestamp(block.block_header.timestamp());
+    let mut log_beans = vec![];
+    for (idx, r) in receipts.iter().enumerate() {
+        if r.outcome_status != TransactionOutcome::Failure && r.outcome_status != TransactionOutcome::Success {
+            continue;
+        }
+        let tx = &block.transactions[idx];
+        let tx_hash = format!( "{:#x}", tx.hash);
+        let tx_id = find_tx(&tx_hash).unwrap().id;
+        for (log_index, log) in r.logs.iter().enumerate() {
+            let address_id = save_address(&log.address, block_time).id;
+            let mut new_log = NewLog{
+                tx_id, log_index: log_index as i32, address_id,
+                topic0_id: 0, topic1_id: 0, topic2_id: 0, topic3_id: 0
+            };
+            let mut topic_ids = [0; 4];
+            for (t_index, t) in log.topics.iter().enumerate() {
+                topic_ids[t_index] = save_bytes32(&t, block_time).id;
+            }
+            new_log.topic0_id = topic_ids[0];
+            new_log.topic1_id = topic_ids[1];
+            new_log.topic2_id = topic_ids[2];
+            new_log.topic3_id = topic_ids[3];
+            log_beans.push(new_log);
+        }
+    }
+    if log_beans.len() == 0 {
+        return;
+    }
+    let conn = _POOL.get().unwrap();
+    diesel::replace_into(logs::table)
+        .values(&log_beans)
+        .execute(&conn)
+        .expect("Error saving new logs_arr");
 }
 // txs
 pub fn remove_tx_relation(hash_: &H256) {

@@ -1520,7 +1520,10 @@ impl ConsensusExecutionHandler {
                 block_receipts.clone(),
                 on_local_pivot,
             );
-            self.data_man.insert_block_tx(&block, &tx_status);
+            if on_local_pivot {
+                self.data_man.insert_block_tx(&block, &tx_status);
+                self.data_man.insert_block_receipts(&block, block_receipts.clone());
+            }
             epoch_receipts.push(block_receipts);
         }
         if self.pos_verifier.pos_option().is_some() {
