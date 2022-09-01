@@ -130,6 +130,7 @@ enum ExecutionTask {
 /// an epoch
 #[derive(Debug)]
 pub struct EpochExecutionTask {
+    epoch_number: u64,
     epoch_hash: H256,
     epoch_block_hashes: Vec<H256>,
     start_block_number: u64,
@@ -149,6 +150,7 @@ impl EpochExecutionTask {
     ) -> Self
     {
         Self {
+            epoch_number: inner.arena[epoch_arena_index].data.epoch_number,
             epoch_hash: inner.arena[epoch_arena_index].hash,
             epoch_block_hashes: inner.get_epoch_block_hashes(epoch_arena_index),
             start_block_number: inner
@@ -879,6 +881,7 @@ impl ConsensusExecutionHandler {
     {
         let _timer = MeterTimer::time_func(CONSENSIS_EXECUTION_TIMER.as_ref());
         self.compute_epoch(
+            task.epoch_number,
             &task.epoch_hash,
             &task.epoch_block_hashes,
             task.start_block_number,
@@ -943,6 +946,7 @@ impl ConsensusExecutionHandler {
     /// be recycled.
     pub fn compute_epoch(
         &self,
+        epoch_number: u64,
         epoch_hash: &H256,
         epoch_block_hashes: &Vec<H256>,
         start_block_number: u64,
@@ -1064,6 +1068,7 @@ impl ConsensusExecutionHandler {
 
         let epoch_receipts = self
             .process_epoch_transactions(
+                epoch_number,
                 *epoch_hash,
                 &mut state,
                 &epoch_blocks,
@@ -1083,6 +1088,7 @@ impl ConsensusExecutionHandler {
             self.process_rewards_and_fees(
                 &mut state,
                 &reward_execution_info,
+                epoch_number,
                 epoch_hash,
                 on_local_pivot,
                 debug_record.as_deref_mut(),
@@ -1187,7 +1193,7 @@ impl ConsensusExecutionHandler {
     }
 
     fn process_epoch_transactions(
-        &self, epoch_id: EpochId, state: &mut State,
+        &self,epoch_number:u64, epoch_id: EpochId, state: &mut State,
         epoch_blocks: &Vec<Arc<Block>>, start_block_number: u64,
         on_local_pivot: bool,
     ) -> DbResult<Vec<Arc<BlockReceipts>>>
@@ -1241,14 +1247,13 @@ impl ConsensusExecutionHandler {
 
         let mut evm_tx_index = 0;
 
-        for block in epoch_blocks.iter() {
+        for (block_index, block) in epoch_blocks.iter().enumerate() {
             self.maybe_update_state(state, block_number);
             let mut cfx_tx_index = 0;
 
             let mut tx_exec_error_messages =
                 Vec::with_capacity(block.transactions.len());
             let mut receipts = Vec::new();
-            let mut tx_status = Vec::new();
             debug!(
                 "process txs in block: hash={:?}, tx count={:?}",
                 block.hash(),
@@ -1416,7 +1421,6 @@ impl ConsensusExecutionHandler {
                         }
                     }
                 }
-                tx_status.push(tx_outcome_status);
                 let (phantom_txs, log_bloom) = build_bloom_and_recover_phantom(
                     &transaction_logs,
                     transaction.hash,
@@ -1521,8 +1525,9 @@ impl ConsensusExecutionHandler {
                 on_local_pivot,
             );
             if on_local_pivot {
-                self.data_man.insert_block_tx(&block, &tx_status);
-                self.data_man.insert_block_receipts(&block, block_receipts.clone());
+                self.data_man.insert_block_receipts(&block,
+                                                    block_receipts.clone(),
+                                                    epoch_number, block_index as u8);
             }
             epoch_receipts.push(block_receipts);
         }
@@ -1567,6 +1572,7 @@ impl ConsensusExecutionHandler {
     /// anticone difficulty
     fn process_rewards_and_fees(
         &self, state: &mut State, reward_info: &RewardExecutionInfo,
+        epoch_number: u64,
         epoch_later: &H256, on_local_pivot: bool,
         mut debug_record: Option<&mut ComputeEpochDebugRecord>, spec: Spec,
     )
@@ -1710,6 +1716,7 @@ impl ConsensusExecutionHandler {
                     if epoch_receipts.is_none() {
                         epoch_receipts = Some(self.recompute_states(
                             &reward_epoch_hash,
+                            epoch_number,
                             &epoch_blocks,
                             ctx.start_block_number,
                         )
@@ -1876,7 +1883,7 @@ impl ConsensusExecutionHandler {
     }
 
     fn recompute_states(
-        &self, pivot_hash: &H256, epoch_blocks: &Vec<Arc<Block>>,
+        &self, pivot_hash: &H256, epoch_number:u64, epoch_blocks: &Vec<Arc<Block>>,
         start_block_number: u64,
     ) -> DbResult<Vec<Arc<BlockReceipts>>>
     {
@@ -1907,6 +1914,7 @@ impl ConsensusExecutionHandler {
                 .unwrap(),
         ))?;
         self.process_epoch_transactions(
+            epoch_number,
             *pivot_hash,
             &mut state,
             &epoch_blocks,

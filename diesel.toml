@@ -2,4 +2,4 @@
 # see diesel.rs/guides/configuring-diesel-cli
 
 [print_schema]
-file = "core/src/block_data_manager/relational_db.rs"
+file = "core/src/block_data_manager/auto_gen_schema.rs"

@@ -259,6 +259,7 @@ impl BlockDataManager {
 
         if cur_era_genesis_hash == data_man.true_genesis.hash() {
             // Only insert block body for true genesis
+            data_man.db_manager.insert_block0_tx(&data_man.true_genesis);
             data_man.insert_block(
                 data_man.true_genesis.clone(),
                 true, /* persistent */
@@ -394,11 +395,8 @@ impl BlockDataManager {
         assert!(tx_index.real_index < block.transactions.len());
         Some(block.transactions[tx_index.real_index].clone())
     }
-    pub fn insert_block_receipts(&self, block: &Block, block_receipts: Arc<BlockReceipts>) {
-        insert_block_receipts(&block, block_receipts);
-    }
-    pub fn insert_block_tx(&self, block: &Block, tx_status: &Vec<TransactionOutcome>) {
-        self.db_manager.insert_block_tx(block, tx_status);
+    pub fn insert_block_receipts(&self, block: &Block, block_receipts: Arc<BlockReceipts>, epoch:u64, block_index: u8) {
+        insert_block_receipts(&block, block_receipts, epoch, block_index);
     }
     /// insert block body in memory cache and db
     pub fn insert_block_body(

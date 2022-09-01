@@ -8,6 +8,7 @@ use std::env;
 use primitives::{Block, TransactionOutcome, BlockReceipts};
 use cfx_types::{Address, H256};
 use std::sync::Arc;
+use primitives::transaction::Action::{Call, Create};
 
 type DbCon = MysqlConnection;
 lazy_static! {
@@ -22,55 +23,61 @@ pub fn pool() -> Pool<ConnectionManager<DbCon>> {
 }
 //===
 table! {
-    blocks (id) {
-        id -> Unsigned<Bigint>,
+    blocks (epoch, block_index) {
+        epoch -> Unsigned<Bigint>,
+        block_index -> Unsigned<Tinyint>,
         hash -> Text,
-        height -> Unsigned<Bigint>,
         timestamp -> Timestamp,
     }
 }
 #[derive(Queryable)]
 pub struct BlockPO {
-    pub id: u64,
+    pub epoch: u64,
+    pub block_index: u8,
     pub hash: String,
-    pub height: u64,
     pub timestamp: NaiveDateTime,
 }
 #[derive(Insertable)]
 #[table_name="blocks"]
 pub struct NewBlock<'a> {
+    pub epoch: u64,
+    pub block_index: u8,
     pub hash: &'a str,
-    pub height: &'a u64,
     pub timestamp: &'a NaiveDateTime,
 }
 //===
 table! {
-    log_data (id) {
-        id -> Unsigned<Bigint>,
-        tx_id -> Unsigned<Bigint>,
+    log_data (epoch, block_index, tx_index, log_index) {
+        epoch -> Unsigned<Bigint>,
+        block_index -> Unsigned<Tinyint>,
+        tx_index -> Unsigned<Smallint>,
         log_index -> Unsigned<Smallint>,
         bytes -> Nullable<Blob>,
     }
 }
 #[derive(Queryable)]
 pub struct LogDataPO<'a> {
-    pub id: u64,
-    pub tx_id: u64,
+    pub epoch: u64,
+    pub block_index: u8,
+    pub tx_index: u16,
     pub log_index: u16,
     pub bytes: &'a Vec<u8>,
 }
 #[derive(Insertable)]
 #[table_name="log_data"]
 pub struct NewLogData<'a> {
-    pub tx_id: u64,
+    pub epoch: u64,
+    pub block_index: u8,
+    pub tx_index: u16,
     pub log_index: u16,
     pub bytes: &'a Vec<u8>,
 }
 //===
 table! {
-    logs (id) {
-        id -> Unsigned<Bigint>,
-        tx_id -> Unsigned<Bigint>,
+    logs (epoch, block_index, tx_index, log_index) {
+        epoch -> Unsigned<Bigint>,
+        block_index -> Unsigned<Tinyint>,
+        tx_index -> Unsigned<Smallint>,
         log_index -> Unsigned<Smallint>,
         address_id -> Unsigned<Bigint>,
         topic0_id -> Unsigned<Bigint>,
@@ -81,8 +88,9 @@ table! {
 }
 #[derive(Queryable)]
 pub struct LogPO {
-    pub id: u64,
-    pub tx_id: u64,
+    pub epoch: u64,
+    pub block_index: u8,
+    pub tx_index: u16,
     pub log_index: u16,
     pub address_id: u64,
     pub topic0_id: u64,
@@ -93,7 +101,9 @@ pub struct LogPO {
 #[derive(Insertable)]
 #[table_name="logs"]
 pub struct NewLog {
-    pub tx_id: u64,
+    pub epoch: u64,
+    pub block_index: u8,
+    pub tx_index: u16,
     pub log_index: u16,
     pub address_id: u64,
     pub topic0_id: u64,
@@ -103,42 +113,43 @@ pub struct NewLog {
 }
 //===
 table! {
-    txs (id) {
-        id -> Unsigned<Bigint>,
+    txs (epoch, block_index, tx_index) {
+        epoch -> Unsigned<Bigint>,
+        block_index -> Unsigned<Tinyint>,
+        tx_index -> Unsigned<Smallint>,
         hash -> Text,
-        height -> Unsigned<Bigint>,
         timestamp -> Timestamp,
-        block_id -> Unsigned<Bigint>,
         from_id -> Unsigned<Bigint>,
         to_id -> Unsigned<Bigint>,
         value -> Text,
-        status -> Integer,
+        status -> Unsigned<Tinyint>,
     }
 }
 #[derive(Insertable)]
 #[table_name="txs"]
-pub struct NewTx<'a, 'b> {
+pub struct NewTx<'a> {
+    pub epoch: u64,
+    pub block_index: u8,
+    pub tx_index: u16,
     pub hash: String,
-    pub height: &'b u64,
     pub timestamp: &'a NaiveDateTime,
 
-    pub block_id: &'a u64,
-    pub from_id: u64,
-    pub to_id: &'a u64,
-    pub value: String,
-    pub status: i32,
-}
-#[derive(Queryable)]
-pub struct TxPO {
-    pub id: u64,
-    pub hash: String,
-    pub height: u64,
-    pub timestamp: NaiveDateTime,
-    pub block_id: u64,
     pub from_id: u64,
     pub to_id: u64,
     pub value: String,
-    pub status: i32,
+    pub status: u8,
+}
+#[derive(Queryable)]
+pub struct TxPO {
+    pub epoch: u64,
+    pub block_index: u8,
+    pub index_in_block: u16,
+    pub hash: String,
+    pub timestamp: NaiveDateTime,
+    pub from_id: u64,
+    pub to_id: u64,
+    pub value: String,
+    pub status: u8,
 }
 pub fn find_tx(hash_: &String) -> Option<TxPO> {
     use self::txs::dsl::*;
@@ -230,7 +241,8 @@ pub fn save_address(addr: &Address, timestamp: &NaiveDateTime) -> AddressPO {
     }
 }
 // logs
-pub fn insert_block_receipts(block: &Block, block_receipts: Arc<BlockReceipts>) {
+pub fn insert_block_receipts(block: &Block, block_receipts: Arc<BlockReceipts>, epoch:u64, block_index: u8) {
+    insert_block_relation(block, epoch, block_index);
     let receipts = &block_receipts.receipts;
     if receipts.is_empty() {
         return
@@ -238,17 +250,17 @@ pub fn insert_block_receipts(block: &Block, block_receipts: Arc<BlockReceipts>) 
     let block_time = &build_block_timestamp(block.block_header.timestamp());
     let mut log_beans = vec![];
     let mut log_data_arr = vec![];
+    let mut tx_status = Vec::new();
     for (idx, r) in receipts.iter().enumerate() {
+        tx_status.push(r.outcome_status);
         if r.outcome_status != TransactionOutcome::Failure && r.outcome_status != TransactionOutcome::Success {
             continue;
         }
-        let tx = &block.transactions[idx];
-        let tx_hash = format!( "{:#x}", tx.hash);
-        let tx_id = find_tx(&tx_hash).unwrap().id;
         for (log_index, log) in r.logs.iter().enumerate() {
             let address_id = save_address(&log.address, block_time).id;
             let mut new_log = NewLog{
-                tx_id, log_index: log_index as u16, address_id,
+                epoch, block_index, tx_index: idx as u16,
+                log_index: log_index as u16, address_id,
                 topic0_id: 0, topic1_id: 0, topic2_id: 0, topic3_id: 0
             };
             let mut topic_ids = [0; 4];
@@ -262,25 +274,31 @@ pub fn insert_block_receipts(block: &Block, block_receipts: Arc<BlockReceipts>) 
             log_beans.push(new_log);
             if log.data.len() > 0 {
                 log_data_arr.push(NewLogData{
-                    tx_id,
+                    epoch,block_index, tx_index: idx as u16,
                     log_index: log_index as u16,
                     bytes: &log.data,
                 })
             }
         }
     }
-    if log_beans.len() == 0 {
+    insert_block_tx_relation(block, &tx_status, epoch, block_index);
+    if log_beans.is_empty() {
         return;
     }
     let conn = _POOL.get().unwrap();
-    diesel::replace_into(logs::table)
-        .values(&log_beans)
-        .execute(&conn)
-        .expect("Error saving new logs_arr");
-    diesel::replace_into(log_data::table)
-        .values(&log_data_arr)
-        .execute(&conn)
-        .expect("Error saving new logs_data_arr");
+    use diesel::result::Error;
+    conn.transaction::<_,Error,_>(||{
+        diesel::replace_into(logs::table)
+            .values(&log_beans)
+            .execute(&conn)
+            .expect("Error saving new logs_arr");
+        diesel::replace_into(log_data::table)
+            .values(&log_data_arr)
+            .execute(&conn)
+            .expect("Error saving new logs_data_arr");
+        Ok(())
+    }).unwrap()
+
 }
 // txs
 pub fn remove_tx_relation(hash_: &H256) {
@@ -290,39 +308,36 @@ pub fn remove_tx_relation(hash_: &H256) {
     diesel::delete(txs.filter(hash.eq(hash_0x)))
         .execute(&conn).unwrap();
 }
-pub fn insert_block_tx_relation(block: &Block, tx_status: &Vec<TransactionOutcome>) {
+// the 1st epoch is 1, not 0. genesis epoch 0 is special. :<
+pub fn insert_block_tx_relation(block: &Block, tx_status: &Vec<TransactionOutcome>, epoch:u64, block_index: u8) {
     // txVec: &Vec<Arc<SignedTransaction>>
     if block.transactions.is_empty(){
         return
     }
-    let height = block.block_header.height();
-    let hash = format!( "{:#x}", block.block_header.hash());
-    let block_po = query_block(&hash).unwrap();
     let mut tx_arr =  Vec::new();
     let block_time = &build_block_timestamp(block.block_header.timestamp());
-    let u64height = &height;
     for (idx, tx) in block.transactions.iter().enumerate() {
         let status = tx_status[idx];
         if status != TransactionOutcome::Failure && status != TransactionOutcome::Success {
             continue;
         }
         let from_id = save_address(&tx.sender, block_time).id;
+        let to_id = match tx.action() {
+            Call(addr)=>save_address(&addr, block_time).id,
+            Create=>0,
+        };
         let new_tx = NewTx{
+            epoch,
+            block_index,
+            tx_index: idx as u16,
             hash: (format!( "{:#x}", tx.hash) ),
-            height: u64height,
             timestamp: block_time,
 
-            block_id: &block_po.id,
             from_id,//: from_id,
-            to_id: &0,//&save_address(&tx.sender, blockTime).id,
+            to_id,
             value: tx.value().to_string(),
-            status: status as i32,
+            status: status as u8,
         };
-        if height == 0 {
-            if find_tx(&new_tx.hash).is_some() {
-                return
-            }
-        }
         tx_arr.push(new_tx);
     }
     let conn = _POOL.get().unwrap();
@@ -338,30 +353,20 @@ pub fn query_block(block_hash: &str) -> Option<BlockPO> {
     blocks.filter(hash.eq(block_hash))
         .get_result(&conn).optional().unwrap()
 }
-pub fn insert_block_relation(block: &Block) {
+pub fn insert_block_relation(block: &Block, epoch: u64, block_index: u8) {
     let conn = _POOL.get().unwrap();
 
-    let height = block.block_header.height();
     let hash = format!( "{:#x}", block.block_header.hash());
 
-    if height == 0 {
-        let block_0 = query_block(&hash);
-        if block_0.is_some() {
-            return;
-        }
-    }
     let new_block = NewBlock{
+        block_index, epoch,
         hash: &( hash ),
-        height: &height,
         timestamp: &build_block_timestamp(block.block_header.timestamp()),
     };
     diesel::insert_into(blocks::table)
         .values(&new_block)
         .execute(&conn)
         .expect("Error saving new block");
-    if height == 0 {
-        insert_block_tx_relation(block, &vec![TransactionOutcome::Success; block.transactions.len()]);
-    }
 }
 
 pub fn build_block_timestamp(mut timestamp: u64) -> NaiveDateTime {

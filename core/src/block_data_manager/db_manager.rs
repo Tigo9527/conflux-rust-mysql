@@ -28,7 +28,7 @@ use rlp::Rlp;
 use std::{collections::HashMap, fs, path::Path, sync::Arc};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-use crate::block_data_manager::relational_db::{insert_block_tx_relation, insert_block_relation, remove_tx_relation};
+use crate::block_data_manager::relational_db::{insert_block_tx_relation, remove_tx_relation, insert_block_relation, query_block};
 
 const LOCAL_BLOCK_INFO_SUFFIX_BYTE: u8 = 1;
 const BLOCK_BODY_SUFFIX_BYTE: u8 = 2;
@@ -274,11 +274,17 @@ impl DBManager {
             &blamed_header_verified_roots_key(block_height),
         )
     }
-    pub fn insert_block_tx(&self, block: &Block, tx_status: &Vec<TransactionOutcome>) {
-        insert_block_tx_relation(block, tx_status);
+    pub fn insert_block0_tx(&self, block: &Block) {
+        let hash = format!( "{:#x}", block.block_header.hash());
+        let block_0 = query_block(&hash);
+        if block_0.is_some() {
+            return;
+        }
+        insert_block_relation(block, 0, 0);
+        insert_block_tx_relation(block, &vec![TransactionOutcome::Success; block.transactions.len()],
+                                 0, 0);
     }
     pub fn insert_block_body_to_db(&self, block: &Block) {
-        insert_block_relation(block);
         self.insert_to_db(
             DBTable::Blocks,
             &block_body_key(&block.hash()),
