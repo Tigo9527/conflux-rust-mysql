@@ -1199,8 +1199,8 @@ impl ConsensusExecutionHandler {
         on_local_pivot: bool,
     ) -> DbResult<Vec<Arc<BlockReceipts>>>
     {
-        if task.on_local_pivot {
-            prepare_epoch_relation(task.epoch_number);
+        if on_local_pivot {
+            prepare_epoch_relation(epoch_number);
         }
         // Prefetch accounts for transactions.
         // The return value _prefetch_join_handles is used to join all threads
@@ -1559,8 +1559,8 @@ impl ConsensusExecutionHandler {
         if on_local_pivot {
             self.tx_pool.recycle_transactions(to_pending);
         }
-        if task.on_local_pivot {
-            finish_epoch_relation(task.epoch_number);
+        if on_local_pivot {
+            finish_epoch_relation(epoch_number);
         }
         debug!("Finish processing tx for epoch");
         Ok(epoch_receipts)
