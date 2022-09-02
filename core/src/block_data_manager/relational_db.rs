@@ -14,7 +14,7 @@ use std::sync::Mutex;
 type DbCon = MysqlConnection;
 lazy_static! {
     static ref _POOL: Pool<ConnectionManager<DbCon>> = pool();
-    static ref previous_saved_epoch: Mutex<u64> = Mutex::new(0);
+    static ref PREVIOUS_SAVED_EPOCH: Mutex<u64> = Mutex::new(find_config_u64(EPOCH_CONFIG).unwrap());
 }
 pub fn pool() -> Pool<ConnectionManager<DbCon>> {
     dotenv().ok();
@@ -23,6 +23,45 @@ pub fn pool() -> Pool<ConnectionManager<DbCon>> {
     let manager = ConnectionManager::<DbCon>::new(database_url);
     Pool::builder().max_size(15).build(manager).unwrap()
 }
+//===
+const EPOCH_CONFIG: &str = "epoch";
+table! {
+    t_config (name) {
+        name -> Text,
+        content -> Text,
+    }
+}
+#[derive(Queryable)]
+pub struct ConfigPO {
+    pub name: String,
+    pub content: String,
+}
+#[derive(Insertable)]
+#[table_name="t_config"]
+pub struct NewConfig<'a> {
+    pub name: &'a str,
+    pub content: &'a str,
+}
+fn find_config_u64(name: &str) -> Option<u64> {
+    return match find_config(name) {
+        Some(cfg)=>cfg.content.parse::<u64>().ok(),
+        None=> None,
+    }
+}
+fn find_config(name_: &str) -> Option<ConfigPO> {
+    use self::t_config::dsl::*;
+    let conn = _POOL.get().unwrap();
+    t_config.filter(name.eq(name_))
+        .get_result(&conn).optional().unwrap()
+}
+fn save_config(name_: &str, content_: &str) {
+    let conn = _POOL.get().unwrap();
+    diesel::insert_into(t_config::table).values(&NewConfig{
+        name: name_, content: content_
+    })
+        .execute(&conn).unwrap();
+}
+
 //===
 table! {
     blocks (epoch, block_index) {
@@ -201,7 +240,7 @@ pub struct NewBytes32<'a> {
 }
 //==
 pub fn prepare_epoch_relation(epoch_n: u64) {
-    if epoch_n <= *previous_saved_epoch.lock().unwrap() {
+    if epoch_n <= *PREVIOUS_SAVED_EPOCH.lock().unwrap() {
         let conn = &_POOL.get().unwrap();
         pop_log_data(epoch_n, conn);
         pop_logs(epoch_n, conn);
@@ -210,7 +249,8 @@ pub fn prepare_epoch_relation(epoch_n: u64) {
     }
 }
 pub fn finish_epoch_relation(epoch_n: u64) {
-    *previous_saved_epoch.lock().unwrap() = epoch_n;
+    save_config(EPOCH_CONFIG, &(epoch_n.to_string()));
+    *PREVIOUS_SAVED_EPOCH.lock().unwrap() = epoch_n;
 }
 pub fn find_address(addr: &str) -> Option<AddressPO>{
     use self::addresses::dsl::*;

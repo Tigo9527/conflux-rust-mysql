@@ -55,3 +55,8 @@ create table logs (
                 index idx_epoch_topic0 (epoch, topic0_id), -- query by epoch (and topic)
                 index idx_addr_epoch (address_id, epoch)  -- query by addr and epoch
 );
+
+create table config (
+    name varchar(128) not null primary key ,
+    content varchar(2048) not null
+);
