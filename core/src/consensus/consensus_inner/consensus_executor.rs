@@ -881,9 +881,6 @@ impl ConsensusExecutionHandler {
     )
     {
         let _timer = MeterTimer::time_func(CONSENSIS_EXECUTION_TIMER.as_ref());
-        if task.on_local_pivot {
-            prepare_epoch_relation(task.epoch_number);
-        }
         self.compute_epoch(
             task.epoch_number,
             &task.epoch_hash,
@@ -894,9 +891,6 @@ impl ConsensusExecutionHandler {
             debug_record,
             task.force_recompute,
         );
-        if task.on_local_pivot {
-            finish_epoch_relation(task.epoch_number);
-        }
     }
 
     fn handle_get_result_task(&self, task: GetExecutionResultTask) {
@@ -1205,6 +1199,9 @@ impl ConsensusExecutionHandler {
         on_local_pivot: bool,
     ) -> DbResult<Vec<Arc<BlockReceipts>>>
     {
+        if task.on_local_pivot {
+            prepare_epoch_relation(task.epoch_number);
+        }
         // Prefetch accounts for transactions.
         // The return value _prefetch_join_handles is used to join all threads
         // before the exit of this function.
@@ -1562,7 +1559,9 @@ impl ConsensusExecutionHandler {
         if on_local_pivot {
             self.tx_pool.recycle_transactions(to_pending);
         }
-
+        if task.on_local_pivot {
+            finish_epoch_relation(task.epoch_number);
+        }
         debug!("Finish processing tx for epoch");
         Ok(epoch_receipts)
     }
