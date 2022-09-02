@@ -34,7 +34,7 @@ pub mod db_gc_manager;
 pub mod db_manager;
 pub mod tx_data_manager;
 
-mod relational_db;
+pub mod relational_db;
 
 use crate::{
     block_data_manager::{

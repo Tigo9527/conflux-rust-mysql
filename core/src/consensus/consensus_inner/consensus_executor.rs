@@ -76,6 +76,7 @@ use crate::{
     vm::{Env, Error as VmErr},
     SharedTransactionPool,
 };
+use crate::block_data_manager::relational_db::{prepare_epoch_relation, finish_epoch_relation};
 
 lazy_static! {
     static ref CONSENSIS_EXECUTION_TIMER: Arc<dyn Meter> =
@@ -880,6 +881,7 @@ impl ConsensusExecutionHandler {
     )
     {
         let _timer = MeterTimer::time_func(CONSENSIS_EXECUTION_TIMER.as_ref());
+        prepare_epoch_relation(task.epoch_number);
         self.compute_epoch(
             task.epoch_number,
             &task.epoch_hash,
@@ -890,6 +892,7 @@ impl ConsensusExecutionHandler {
             debug_record,
             task.force_recompute,
         );
+        finish_epoch_relation(task.epoch_number);
     }
 
     fn handle_get_result_task(&self, task: GetExecutionResultTask) {

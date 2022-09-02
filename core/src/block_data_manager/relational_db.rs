@@ -9,10 +9,12 @@ use primitives::{Block, TransactionOutcome, BlockReceipts};
 use cfx_types::{Address, H256};
 use std::sync::Arc;
 use primitives::transaction::Action::{Call, Create};
+use std::sync::Mutex;
 
 type DbCon = MysqlConnection;
 lazy_static! {
     static ref _POOL: Pool<ConnectionManager<DbCon>> = pool();
+    static ref previous_saved_epoch: Mutex<u64> = Mutex::new(0);
 }
 pub fn pool() -> Pool<ConnectionManager<DbCon>> {
     dotenv().ok();
@@ -198,6 +200,18 @@ pub struct NewBytes32<'a> {
     pub timestamp: &'a NaiveDateTime,
 }
 //==
+pub fn prepare_epoch_relation(epoch_n: u64) {
+    if epoch_n <= previous_saved_epoch.into() {
+        let conn = &_POOL.get().unwrap();
+        pop_log_data(epoch_n, conn);
+        pop_logs(epoch_n, conn);
+        pop_tx(epoch_n, conn);
+        pop_block(epoch_n, conn);
+    }
+}
+pub fn finish_epoch_relation(epoch_n: u64) {
+    *previous_saved_epoch.lock().unwrap() = epoch_n;
+}
 pub fn find_address(addr: &str) -> Option<AddressPO>{
     use self::addresses::dsl::*;
     let conn = _POOL.get().unwrap();
@@ -300,6 +314,18 @@ pub fn insert_block_receipts(block: &Block, block_receipts: Arc<BlockReceipts>, 
     }).unwrap()
 
 }
+pub fn pop_logs(epoch_n: u64, conn: &DbCon) {
+    use self::logs::dsl::*;
+    let pop_count = diesel::delete(logs.filter(epoch.gte(epoch_n)))
+        .execute(&conn).unwrap();
+    info!("logs : epoch {} pop_count {}", epoch_n, pop_count);
+}
+pub fn pop_log_data(epoch_n: u64, conn: &DbCon) {
+    use self::log_data::dsl::*;
+    let pop_count = diesel::delete(log_data.filter(epoch.gte(epoch_n)))
+        .execute(&conn).unwrap();
+    info!("log_data : epoch {} pop_count {}", epoch_n, pop_count);
+}
 // txs
 pub fn remove_tx_relation(hash_: &H256) {
     use self::txs::dsl::*;
@@ -307,6 +333,12 @@ pub fn remove_tx_relation(hash_: &H256) {
     let hash_0x = format!( "{:#x}", hash_);
     diesel::delete(txs.filter(hash.eq(hash_0x)))
         .execute(&conn).unwrap();
+}
+pub fn pop_tx(epoch_n: u64, conn: &DbCon) {
+    use self::txs::dsl::*;
+    let pop_count = diesel::delete(txs.filter(epoch.gte(epoch_n)))
+        .execute(&conn).unwrap();
+    info!("tx : epoch {} pop_count {}", epoch_n, pop_count);
 }
 // the 1st epoch is 1, not 0. genesis epoch 0 is special. :<
 pub fn insert_block_tx_relation(block: &Block, tx_status: &Vec<TransactionOutcome>, epoch:u64, block_index: u8) {
@@ -368,7 +400,12 @@ pub fn insert_block_relation(block: &Block, epoch: u64, block_index: u8) {
         .execute(&conn)
         .expect("Error saving new block");
 }
-
+pub fn pop_block(epoch_n: u64, conn: &DbCon) {
+    use self::blocks::dsl::*;
+    let pop_count = diesel::delete(blocks.filter(epoch.gte(epoch_n)))
+        .execute(&conn).unwrap();
+    info!("block : epoch {} pop_count {}", epoch_n, pop_count);
+}
 pub fn build_block_timestamp(mut timestamp: u64) -> NaiveDateTime {
     if timestamp == 0 {
         timestamp = 1;
