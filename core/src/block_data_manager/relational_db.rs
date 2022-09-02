@@ -240,6 +240,7 @@ pub struct NewBytes32<'a> {
 }
 //==
 pub fn prepare_epoch_relation(epoch_n: u64) {
+    info!("prepare_epoch_relation {}", epoch_n);
     if epoch_n <= *PREVIOUS_SAVED_EPOCH.lock().unwrap() {
         let conn = &_POOL.get().unwrap();
         pop_log_data(epoch_n, conn);
@@ -251,6 +252,7 @@ pub fn prepare_epoch_relation(epoch_n: u64) {
 pub fn finish_epoch_relation(epoch_n: u64) {
     save_config(EPOCH_CONFIG, &(epoch_n.to_string()));
     *PREVIOUS_SAVED_EPOCH.lock().unwrap() = epoch_n;
+    info!("finish_epoch_relation {}", epoch_n);
 }
 pub fn find_address(addr: &str) -> Option<AddressPO>{
     use self::addresses::dsl::*;
