@@ -56,7 +56,7 @@ fn find_config(name_: &str) -> Option<ConfigPO> {
 }
 fn save_config(name_: &str, content_: &str) {
     let conn = _POOL.get().unwrap();
-    diesel::insert_into(t_config::table).values(&NewConfig{
+    diesel::repalce_into(t_config::table).values(&NewConfig{
         name: name_, content: content_
     })
         .execute(&conn).unwrap();

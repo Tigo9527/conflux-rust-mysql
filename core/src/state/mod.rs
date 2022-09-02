@@ -684,7 +684,7 @@ impl StateOpsTrait for StateGeneric {
         user: Address,
     ) -> DbResult<()>
     {
-        info!("add_commission_privilege contract_address: {:?}, contract_owner: {:?}, user: {:?}", contract_address, contract_owner, user);
+        debug!("add_commission_privilege contract_address: {:?}, contract_owner: {:?}, user: {:?}", contract_address, contract_owner, user);
 
         let mut account = self.require_exists(
             &SPONSOR_WHITELIST_CONTROL_CONTRACT_ADDRESS.with_native_space(),
