@@ -881,7 +881,9 @@ impl ConsensusExecutionHandler {
     )
     {
         let _timer = MeterTimer::time_func(CONSENSIS_EXECUTION_TIMER.as_ref());
-        prepare_epoch_relation(task.epoch_number);
+        if task.on_local_pivot {
+            prepare_epoch_relation(task.epoch_number);
+        }
         self.compute_epoch(
             task.epoch_number,
             &task.epoch_hash,
@@ -892,7 +894,9 @@ impl ConsensusExecutionHandler {
             debug_record,
             task.force_recompute,
         );
-        finish_epoch_relation(task.epoch_number);
+        if task.on_local_pivot {
+            finish_epoch_relation(task.epoch_number);
+        }
     }
 
     fn handle_get_result_task(&self, task: GetExecutionResultTask) {
