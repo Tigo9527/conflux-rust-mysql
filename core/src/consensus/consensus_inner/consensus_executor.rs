@@ -1531,7 +1531,7 @@ impl ConsensusExecutionHandler {
             if on_local_pivot {
                 self.data_man.insert_block_receipts(&block,
                                                     block_receipts.clone(),
-                                                    epoch_number, block_index as u8);
+                                                    pivot_block.block_header.height(), block_index as u8);
             }
             epoch_receipts.push(block_receipts);
         }
@@ -1560,7 +1560,7 @@ impl ConsensusExecutionHandler {
             self.tx_pool.recycle_transactions(to_pending);
         }
         if on_local_pivot {
-            finish_epoch_relation(epoch_number);
+            finish_epoch_relation(pivot_block.block_header.height());
         }
         debug!("Finish processing tx for epoch");
         Ok(epoch_receipts)

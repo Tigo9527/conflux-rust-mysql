@@ -241,13 +241,13 @@ pub struct NewBytes32<'a> {
 //==
 pub fn prepare_epoch_relation(epoch_n: u64) {
     // info!("prepare_epoch_relation {}", epoch_n);
-    // if epoch_n <= *PREVIOUS_SAVED_EPOCH.lock().unwrap() {
-    //     let conn = &_POOL.get().unwrap();
-    //     pop_log_data(epoch_n, conn);
-    //     pop_logs(epoch_n, conn);
-    //     pop_tx(epoch_n, conn);
-    //     pop_block(epoch_n, conn);
-    // }
+    if epoch_n <= *PREVIOUS_SAVED_EPOCH.lock().unwrap() {
+        let conn = &_POOL.get().unwrap();
+        pop_log_data(epoch_n, conn);
+        pop_logs(epoch_n, conn);
+        pop_tx(epoch_n, conn);
+        pop_block(epoch_n, conn);
+    }
 }
 pub fn finish_epoch_relation(epoch_n: u64) {
     save_config(EPOCH_CONFIG, &(epoch_n.to_string()));
@@ -360,13 +360,13 @@ pub fn pop_logs(epoch_n: u64, conn: &DbCon) {
     use self::logs::dsl::*;
     let pop_count = diesel::delete(logs.filter(epoch.ge(epoch_n)))
         .execute(conn).unwrap();
-    info!("logs : epoch {} pop_count {}", epoch_n, pop_count);
+    // info!("logs : epoch {} pop_count {}", epoch_n, pop_count);
 }
 pub fn pop_log_data(epoch_n: u64, conn: &DbCon) {
     use self::log_data::dsl::*;
     let pop_count = diesel::delete(log_data.filter(epoch.ge(epoch_n)))
         .execute(conn).unwrap();
-    info!("log_data : epoch {} pop_count {}", epoch_n, pop_count);
+    // info!("log_data : epoch {} pop_count {}", epoch_n, pop_count);
 }
 // txs
 pub fn remove_tx_relation(hash_: &H256) {
@@ -380,7 +380,7 @@ pub fn pop_tx(epoch_n: u64, conn: &DbCon) {
     use self::txs::dsl::*;
     let pop_count = diesel::delete(txs.filter(epoch.ge(epoch_n)))
         .execute(conn).unwrap();
-    info!("tx : epoch {} pop_count {}", epoch_n, pop_count);
+    // info!("tx : epoch {} pop_count {}", epoch_n, pop_count);
 }
 // the 1st epoch is 1, not 0. genesis epoch 0 is special. :<
 pub fn insert_block_tx_relation(block: &Block, tx_status: &Vec<TransactionOutcome>, epoch:u64, block_index: u8) {
@@ -437,7 +437,7 @@ pub fn insert_block_relation(block: &Block, epoch: u64, block_index: u8) {
         hash: &( hash ),
         timestamp: &build_block_timestamp(block.block_header.timestamp()),
     };
-    let db_ret = diesel::replace_into(blocks::table)
+    let db_ret = diesel::insert_into(blocks::table)
         .values(&new_block)
         .execute(&conn);
     match db_ret {
@@ -454,7 +454,7 @@ pub fn pop_block(epoch_n: u64, conn: &DbCon) {
     use self::blocks::dsl::*;
     let pop_count = diesel::delete(blocks.filter(epoch.ge(epoch_n)))
         .execute(conn).unwrap();
-    info!("block : epoch {} pop_count {}", epoch_n, pop_count);
+    debug!("block : epoch {} pop_count {}", epoch_n, pop_count);
 }
 pub fn build_block_timestamp(mut timestamp: u64) -> NaiveDateTime {
     if timestamp == 0 {
