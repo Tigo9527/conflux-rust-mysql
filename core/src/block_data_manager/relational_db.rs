@@ -358,13 +358,13 @@ pub fn insert_block_receipts(block: &Block, block_receipts: Arc<BlockReceipts>, 
 }
 pub fn pop_logs(epoch_n: u64, conn: &DbCon) {
     use self::logs::dsl::*;
-    let _pop_count = diesel::delete(logs.filter(epoch.ge(epoch_n)))
+    let _pop_count = diesel::delete(logs.filter(epoch.eq(epoch_n)))
         .execute(conn).unwrap();
     // info!("logs : epoch {} pop_count {}", epoch_n, pop_count);
 }
 pub fn pop_log_data(epoch_n: u64, conn: &DbCon) {
     use self::log_data::dsl::*;
-    let _pop_count = diesel::delete(log_data.filter(epoch.ge(epoch_n)))
+    let _pop_count = diesel::delete(log_data.filter(epoch.eq(epoch_n)))
         .execute(conn).unwrap();
     // info!("log_data : epoch {} pop_count {}", epoch_n, pop_count);
 }
@@ -378,7 +378,7 @@ pub fn remove_tx_relation(hash_: &H256) {
 }
 pub fn pop_tx(epoch_n: u64, conn: &DbCon) {
     use self::txs::dsl::*;
-    let _pop_count = diesel::delete(txs.filter(epoch.ge(epoch_n)))
+    let _pop_count = diesel::delete(txs.filter(epoch.eq(epoch_n)))
         .execute(conn).unwrap();
     // info!("tx : epoch {} pop_count {}", epoch_n, pop_count);
 }
@@ -452,7 +452,7 @@ pub fn insert_block_relation(block: &Block, epoch: u64, block_index: u8) {
 }
 pub fn pop_block(epoch_n: u64, conn: &DbCon) {
     use self::blocks::dsl::*;
-    let pop_count = diesel::delete(blocks.filter(epoch.ge(epoch_n)))
+    let pop_count = diesel::delete(blocks.filter(epoch.eq(epoch_n)))
         .execute(conn).unwrap();
     debug!("block : epoch {} pop_count {}", epoch_n, pop_count);
 }
