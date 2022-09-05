@@ -4,7 +4,7 @@ use chrono::NaiveDateTime;
 use diesel::mysql::MysqlConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::prelude::*;
-use std::env;
+use std::{env, process};
 use primitives::{Block, TransactionOutcome, BlockReceipts};
 use cfx_types::{Address, H256};
 use std::sync::Arc;
@@ -446,6 +446,7 @@ pub fn insert_block_relation(block: &Block, epoch: u64, block_index: u8) {
         },
         Err(e)=>{
             panic!("insert block fail, epoch {} {} {:?}", epoch, hash, e);
+            process::exit(1);
         },
     }
 }
