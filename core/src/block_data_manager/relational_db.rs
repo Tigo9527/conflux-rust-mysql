@@ -240,19 +240,19 @@ pub struct NewBytes32<'a> {
 }
 //==
 pub fn prepare_epoch_relation(epoch_n: u64) {
-    info!("prepare_epoch_relation {}", epoch_n);
-    if epoch_n <= *PREVIOUS_SAVED_EPOCH.lock().unwrap() {
-        let conn = &_POOL.get().unwrap();
-        pop_log_data(epoch_n, conn);
-        pop_logs(epoch_n, conn);
-        pop_tx(epoch_n, conn);
-        pop_block(epoch_n, conn);
-    }
+    // info!("prepare_epoch_relation {}", epoch_n);
+    // if epoch_n <= *PREVIOUS_SAVED_EPOCH.lock().unwrap() {
+    //     let conn = &_POOL.get().unwrap();
+    //     pop_log_data(epoch_n, conn);
+    //     pop_logs(epoch_n, conn);
+    //     pop_tx(epoch_n, conn);
+    //     pop_block(epoch_n, conn);
+    // }
 }
 pub fn finish_epoch_relation(epoch_n: u64) {
     save_config(EPOCH_CONFIG, &(epoch_n.to_string()));
     *PREVIOUS_SAVED_EPOCH.lock().unwrap() = epoch_n;
-    info!("finish_epoch_relation {}", epoch_n);
+    // info!("finish_epoch_relation {}", epoch_n);
 }
 pub fn find_address(addr: &str) -> Option<AddressPO>{
     use self::addresses::dsl::*;
@@ -437,12 +437,12 @@ pub fn insert_block_relation(block: &Block, epoch: u64, block_index: u8) {
         hash: &( hash ),
         timestamp: &build_block_timestamp(block.block_header.timestamp()),
     };
-    let db_ret = diesel::insert_into(blocks::table)
+    let db_ret = diesel::replace_into(blocks::table)
         .values(&new_block)
         .execute(&conn);
     match db_ret {
         Ok(_)=>{
-            info!("insert block ok, epoch {} {}", epoch, hash)
+            // info!("insert block ok, epoch {} {}", epoch, hash)
         },
         Err(e)=>{
             info!("insert block fail, epoch {} {} {:?}", epoch, hash, e);
