@@ -442,10 +442,10 @@ pub fn insert_block_relation(block: &Block, epoch: u64, block_index: u8) {
         .execute(&conn);
     match db_ret {
         Ok(_)=>{
-            print!("insert block ok, epoch {} {}", epoch, hash)
+            info!("insert block ok, epoch {} {}", epoch, hash)
         },
         Err(e)=>{
-            panic!("insert block fail, epoch {} {} {:?}", epoch, hash, e);
+            info!("insert block fail, epoch {} {} {:?}", epoch, hash, e);
             process::exit(1);
         },
     }
