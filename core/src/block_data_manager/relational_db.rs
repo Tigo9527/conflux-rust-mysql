@@ -437,10 +437,17 @@ pub fn insert_block_relation(block: &Block, epoch: u64, block_index: u8) {
         hash: &( hash ),
         timestamp: &build_block_timestamp(block.block_header.timestamp()),
     };
-    diesel::insert_into(blocks::table)
+    let db_ret = diesel::insert_into(blocks::table)
         .values(&new_block)
-        .execute(&conn)
-        .expect("Error saving new block");
+        .execute(&conn);
+    match db_ret {
+        Ok(_)=>{
+            print!("insert block ok, epoch {} {}", epoch, hash)
+        },
+        Err(e)=>{
+            panic!("insert block fail, epoch {} {} {:?}", epoch, hash, e);
+        },
+    }
 }
 pub fn pop_block(epoch_n: u64, conn: &DbCon) {
     use self::blocks::dsl::*;
